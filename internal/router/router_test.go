@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 
 	"github.com/winduputra/MyCorePlat/internal/gateway"
 	"github.com/winduputra/MyCorePlat/internal/handlers"
+	"github.com/winduputra/MyCorePlat/internal/installerclient"
+	"github.com/winduputra/MyCorePlat/internal/middleware"
 	"github.com/winduputra/MyCorePlat/internal/model"
 	"github.com/winduputra/MyCorePlat/internal/service"
 )
@@ -96,12 +99,22 @@ func newTestDeps() Deps {
 	if err != nil {
 		panic(err)
 	}
+	catalogHandler, err := handlers.NewCatalogHandler(stubToolService{})
+	if err != nil {
+		panic(err)
+	}
+	installerHandler, err := handlers.NewAdminInstallerHandler(stubInstallerClient{}, handlers.AdminInstallerOptions{})
+	if err != nil {
+		panic(err)
+	}
 	return Deps{
 		Auth:              handlers.NewAuthHandler(stubAuth{}, stubIssuer{}, handlers.AuthOptions{CookieName: "bpbj_admin_session", CookiePath: "/", SessionTTL: 3600, PreAuthCSRFTTL: 600}),
 		Tools:             toolsHandler,
 		Tokens:            tokensHandler,
 		Activity:          activityHandler,
 		Health:            healthHandler,
+		Catalog:           catalogHandler,
+		Installer:         installerHandler,
 		SessionValidator:  stubValidator{},
 		SessionCookieName: "bpbj_admin_session",
 		LoginCSRFVerifier: stubLoginCSRF{},
@@ -121,6 +134,24 @@ type stubHealthSnapshotter struct{}
 func (stubHealthSnapshotter) LatestByTool(_ context.Context, _ []uint64) (map[uint64]*model.ToolHealthCheck, error) {
 	return map[uint64]*model.ToolHealthCheck{}, nil
 }
+
+// stubInstallerClient is a no-op installer client so router tests can construct
+// a real AdminInstallerHandler without an installer service.
+type stubInstallerClient struct{}
+
+func (stubInstallerClient) Configured() bool { return true }
+func (stubInstallerClient) Install(_ context.Context, _ []byte, _ uint64) (*installerclient.Installation, error) {
+	return &installerclient.Installation{Slug: "demo-tool", Status: "installed"}, nil
+}
+func (stubInstallerClient) List(_ context.Context) ([]installerclient.Installation, error) {
+	return nil, nil
+}
+func (stubInstallerClient) Get(_ context.Context, _ string) (*installerclient.Installation, error) {
+	return nil, installerclient.ErrNotFound
+}
+func (stubInstallerClient) Enable(_ context.Context, _ string) error    { return nil }
+func (stubInstallerClient) Disable(_ context.Context, _ string) error   { return nil }
+func (stubInstallerClient) Uninstall(_ context.Context, _ string) error { return nil }
 
 func TestNewRegistersHealthRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -148,7 +179,7 @@ func TestAdminLoginRoutesRegistered(t *testing.T) {
 
 func TestAdminLogoutRequiresAuth(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	// Validator always fails → protected route must reject unauthenticated call.
+	// Validator always fails â†’ protected route must reject unauthenticated call.
 	deps := newTestDeps()
 	deps.SessionValidator = stubValidator{err: errors.New("invalid")}
 	r := New(deps)
@@ -164,7 +195,7 @@ func TestAdminLogoutRequiresCSRF(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := New(newTestDeps())
 
-	// Valid session cookie but no CSRF token → 403.
+	// Valid session cookie but no CSRF token â†’ 403.
 	req := httptest.NewRequest(http.MethodPost, "/admin/logout", nil)
 	req.AddCookie(&http.Cookie{Name: "bpbj_admin_session", Value: "tok"})
 	rec := httptest.NewRecorder()
@@ -178,7 +209,7 @@ func TestAdminLoginPostRequiresPreAuthCSRF(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := New(newTestDeps())
 
-	// POST /admin/login without the pre-auth CSRF cookie/token → 403.
+	// POST /admin/login without the pre-auth CSRF cookie/token â†’ 403.
 	req := httptest.NewRequest(http.MethodPost, "/admin/login", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
@@ -204,7 +235,7 @@ func TestToolsMutationRequiresCSRF(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := New(newTestDeps())
 
-	// Valid session cookie but no CSRF token on a mutating request → 403.
+	// Valid session cookie but no CSRF token on a mutating request â†’ 403.
 	req := httptest.NewRequest(http.MethodPost, "/admin/tools", nil)
 	req.AddCookie(&http.Cookie{Name: "bpbj_admin_session", Value: "tok"})
 	rec := httptest.NewRecorder()
@@ -348,5 +379,169 @@ func TestHealthRouteRequiresAuth(t *testing.T) {
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/health", nil))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("GET /admin/health status = %d, want 401", rec.Code)
+	}
+}
+
+// TestRootServesCatalogWhenAnonymous asserts the new homepage behaviour: an
+// anonymous visitor without a session now sees the public catalog instead of a
+// redirect. (The earlier redirect-to-login behaviour was replaced when the
+// public homepage was introduced.)
+func TestRootServesCatalogWhenAnonymous(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	deps := newTestDeps()
+	deps.SessionValidator = stubValidator{err: errors.New("invalid")}
+	r := New(deps)
+
+	for _, cookie := range []string{"", "bpbj_admin_session=stale"} {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		if cookie != "" {
+			req.Header.Set("Cookie", cookie)
+		}
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET / (cookie=%q) status = %d, want 200 (public catalog)", cookie, rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "Katalog Tool") {
+			t.Fatalf("GET / (cookie=%q) did not render the public catalog", cookie)
+		}
+	}
+}
+
+// TestRootRedirectsAnonymousToLoginWithoutCatalog asserts the fallback: when no
+// catalog handler is wired, an anonymous visitor is still sent to the login
+// page rather than getting a blank 404.
+func TestRootRedirectsAnonymousToLoginWithoutCatalog(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	deps := newTestDeps()
+	deps.Catalog = nil
+	deps.SessionValidator = stubValidator{err: errors.New("invalid")}
+	r := New(deps)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("GET / status = %d, want 302", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/admin/login" {
+		t.Fatalf("GET / Location = %q, want /admin/login", loc)
+	}
+}
+
+func TestRootRedirectsAuthenticatedToDashboard(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := New(newTestDeps())
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Cookie", middleware.SessionCookieName+"=live-session")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("GET / status = %d, want 302", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/admin/tools" {
+		t.Fatalf("GET / Location = %q, want /admin/tools", loc)
+	}
+}
+
+func TestRootRendersCatalogForAnonymousVisitor(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	deps := newTestDeps()
+	deps.SessionValidator = stubValidator{err: errors.New("no session")}
+	r := New(deps)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (public catalog)", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Katalog Tool") {
+		t.Fatalf("expected the public catalog, got: %s", rec.Body.String())
+	}
+}
+
+func TestRootRedirectsAuthenticatedAdminToDashboard(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := New(newTestDeps())
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "bpbj_admin_session", Value: "live-session"})
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/admin/tools" {
+		t.Fatalf("Location = %q, want /admin/tools", loc)
+	}
+}
+
+func TestInstallerRoutesRequireAuth(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	deps := newTestDeps()
+	deps.SessionValidator = stubValidator{err: errors.New("invalid")}
+	r := New(deps)
+
+	cases := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodGet, "/admin/installer"},
+		{http.MethodPost, "/admin/installer"},
+		{http.MethodPost, "/admin/installer/demo-tool/enable"},
+		{http.MethodPost, "/admin/installer/demo-tool/disable"},
+		{http.MethodDelete, "/admin/installer/demo-tool"},
+	}
+	for _, tc := range cases {
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("%s %s without auth status = %d, want 401", tc.method, tc.path, rec.Code)
+		}
+	}
+}
+
+func TestInstallerMutationsRequireCSRF(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := New(newTestDeps())
+
+	// Valid session cookie but no CSRF token → 403 for every mutation.
+	cases := []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPost, "/admin/installer"},
+		{http.MethodPost, "/admin/installer/demo-tool/enable"},
+		{http.MethodPost, "/admin/installer/demo-tool/disable"},
+		{http.MethodDelete, "/admin/installer/demo-tool"},
+	}
+	for _, tc := range cases {
+		req := httptest.NewRequest(tc.method, tc.path, nil)
+		req.AddCookie(&http.Cookie{Name: "bpbj_admin_session", Value: "tok"})
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("%s %s without CSRF status = %d, want 403", tc.method, tc.path, rec.Code)
+		}
+	}
+}
+
+func TestInstallerListRequiresAuthButNotCSRF(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := New(newTestDeps())
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/installer", nil)
+	req.AddCookie(&http.Cookie{Name: "bpbj_admin_session", Value: "tok"})
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /admin/installer status = %d, want 200", rec.Code)
 	}
 }

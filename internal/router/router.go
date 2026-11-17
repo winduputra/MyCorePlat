@@ -3,6 +3,8 @@
 package router
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/winduputra/MyCorePlat/internal/gateway"
@@ -19,6 +21,8 @@ type Deps struct {
 	Tokens               *handlers.AdminTokensHandler
 	Activity             *handlers.AdminActivityHandler
 	Health               *handlers.AdminHealthHandler
+	Installer            *handlers.AdminInstallerHandler
+	Catalog              *handlers.CatalogHandler // public homepage (active+public tools)
 	Gateway              *gateway.Gateway
 	SessionValidator     middleware.SessionValidator
 	SessionCookieName    string
@@ -33,6 +37,33 @@ func New(deps Deps) *gin.Engine {
 	r.Use(gin.Recovery())
 
 	r.GET("/health", handlers.Health)
+
+	// Root landing. For an anonymous visitor this is the public tool catalog
+	// (when a catalog handler is wired) so https://<host>/ never returns 404 and
+	// shows what is actually usable. An authenticated admin is sent straight to
+	// the dashboard, and a visitor with no catalog falls back to the login page.
+	// The route is public and only inspects the session cookie — never headers.
+	authCheck := func(c *gin.Context) bool {
+		if deps.SessionValidator == nil {
+			return false
+		}
+		token, err := c.Cookie(deps.SessionCookieName)
+		if err != nil || token == "" {
+			return false
+		}
+		session, err := deps.SessionValidator.Validate(c.Request.Context(), token)
+		return err == nil && session != nil
+	}
+
+	switch {
+	case deps.Catalog != nil:
+		r.GET("/", handlers.NewRootHandlerForCatalog(authCheck, deps.Catalog))
+	case deps.SessionValidator != nil:
+		root := handlers.NewRootHandler(authCheck)
+		r.GET("/", root.Serve)
+	default:
+		r.GET("/", func(c *gin.Context) { c.Redirect(http.StatusFound, "/admin/login") })
+	}
 
 	// Public tool gateway. These routes are intentionally outside the admin
 	// group: the gateway enforces per-tool status and access type itself, so no
@@ -91,6 +122,18 @@ func New(deps Deps) *gin.Engine {
 			}
 			if deps.Health != nil {
 				admin.GET("/health", deps.Health.List)
+			}
+
+			// Dynamic tool installer. Uploading a package POSTs to the separate
+			// installer service (never to Docker from Core); every mutation goes
+			// through the CSRF-protected admin group. Enable/disable/uninstall are
+			// HTMX-driven so the row is replaced in place.
+			if deps.Installer != nil {
+				admin.GET("/installer", deps.Installer.List)
+				admin.POST("/installer", deps.Installer.Create)
+				admin.POST("/installer/:slug/enable", deps.Installer.Enable)
+				admin.POST("/installer/:slug/disable", deps.Installer.Disable)
+				admin.DELETE("/installer/:slug", deps.Installer.Delete)
 			}
 		}
 	}

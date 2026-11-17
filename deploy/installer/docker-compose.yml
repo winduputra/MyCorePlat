@@ -1,0 +1,96 @@
+# Tool Installer — production compose.
+#
+# SECURITY MODEL
+#   * This is the ONLY container that mounts the Docker socket.
+#   * Core never receives the Docker socket; it calls this service over the
+#     internal `tools` network using a bearer token.
+#   * Resource limits and cap_drop/read_only apply; the socket mount is the one
+#     unavoidable privilege, so the API surface is deliberately tiny and
+#     token-authenticated.
+#
+# PREREQUISITES (one time, on the host)
+#   docker network create proxy
+#   docker network create --internal tools
+#   mkdir -p /srv/tools-bpbj/installer/secrets
+#   # bearer token shared with Core
+#   openssl rand -base64 48 > /srv/tools-bpbj/installer/secrets/installer_token.txt
+#   chmod 600 /srv/tools-bpbj/installer/secrets/installer_token.txt
+#   # DB DSN shared with Core
+#   printf '%s' "$DB_DSN" > /srv/tools-bpbj/installer/secrets/db_dsn.txt
+#   chmod 600 /srv/tools-bpbj/installer/secrets/db_dsn.txt
+#
+# The HMAC key directory is SHARED with Core: the installer writes
+# <slug>.json key files and Core reads them to sign proxied requests.
+services:
+  installer:
+    build:
+      context: ../../
+      dockerfile: deploy/installer/Dockerfile
+      args:
+        # Must match the host's docker group GID so the non-root installer user
+        # can read /var/run/docker.sock. On the host:
+        #   stat -c '%g' /var/run/docker.sock
+        DOCKER_GID: ${DOCKER_GID:-999}
+    image: tools-bpbj/installer:${INSTALLER_VERSION:-latest}
+    container_name: mycoreplat-installer
+    restart: unless-stopped
+    env_file: ./installer.env
+    environment:
+      INSTALLER_ADDR: ":8090"
+      INSTALLER_TOKEN_FILE: /run/secrets/installer_token
+      DB_DSN_FILE: /run/secrets/db_dsn
+      TOOL_HMAC_KEYS_DIR: /run/secrets/tool-hmac
+      # Absolute path of the SAME directory on the Docker HOST. Tool containers
+      # bind-mount it, and the daemon resolves bind sources against the host, so
+      # the installer's own /run/secrets/... path would mount an empty dir.
+      INSTALLER_HMAC_KEYS_HOST_DIR: ${INSTALLER_HMAC_KEYS_HOST_DIR:?set the absolute host path of deploy/installer/secrets/tool-hmac}
+      INSTALLER_WORK_DIR: /tmp/installer
+      # Same allowlist as Core, so registration accepts the tool's upstream.
+      INSTALLER_UPSTREAM_ALLOWED_HOSTS: ${INSTALLER_UPSTREAM_ALLOWED_HOSTS:-pdf-compressor}
+    secrets:
+      - installer_token
+      - db_dsn
+    volumes:
+      # Shared with Core (read-only there, read-write here so keys can be written).
+      - ./secrets/tool-hmac:/run/secrets/tool-hmac
+      # The one privileged dependency of the whole platform.
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - tools
+    expose:
+      - "8090"
+    # The socket is owned by root:docker (or root:root on some hosts). The
+    # installer process runs as UID 10002, so it needs supplementary access to
+    # the socket's group. Set INSTALLER_SOCKET_GID to `stat -c '%g'
+    # /var/run/docker.sock` on the host (0 works for Docker Desktop / root-owned
+    # sockets).
+    group_add:
+      - "${INSTALLER_SOCKET_GID:-0}"
+    # No ports: mapping on purpose — reachable only from Core on `tools`.
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=2g
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    cpus: 2.0
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "/app/installer", "-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  tools:
+    external: true
+    name: tools
+
+secrets:
+  installer_token:
+    file: ./secrets/installer_token.txt
+  db_dsn:
+    file: ./secrets/db_dsn.txt

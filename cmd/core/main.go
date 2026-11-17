@@ -16,6 +16,7 @@ import (
 	"github.com/winduputra/MyCorePlat/internal/config"
 	"github.com/winduputra/MyCorePlat/internal/gateway"
 	"github.com/winduputra/MyCorePlat/internal/handlers"
+	"github.com/winduputra/MyCorePlat/internal/installerclient"
 	"github.com/winduputra/MyCorePlat/internal/middleware"
 	"github.com/winduputra/MyCorePlat/internal/repository"
 	"github.com/winduputra/MyCorePlat/internal/router"
@@ -227,6 +228,31 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// Public homepage: the catalog of tools an anonymous visitor may actually use.
+	catalogHandler, err := handlers.NewCatalogHandler(toolSvc)
+	if err != nil {
+		return err
+	}
+
+	// Dynamic tool installer. Core talks to the installer over its private
+	// HTTP API; the Docker socket is never mounted into Core. When no installer
+	// is configured the handler still renders, reporting that the service is
+	// unavailable, so the page never breaks.
+	var installerClient handlers.InstallerClient
+	if cfg.InstallerBaseURL != "" {
+		client, err := installerclient.New(cfg.InstallerBaseURL, cfg.InstallerToken, 15*time.Minute)
+		if err != nil {
+			return fmt.Errorf("configure tool installer client: %w", err)
+		}
+		installerClient = client
+	}
+	installerHandler, err := handlers.NewAdminInstallerHandler(installerClient, handlers.AdminInstallerOptions{
+		MaxUploadBytes: cfg.InstallerMaxUploadBytes,
+	})
+	if err != nil {
+		return err
+	}
+	installerHandler.SetActivityRecorder(activitySvc)
 
 	srv := &http.Server{
 		Addr: cfg.HTTPAddr,
@@ -240,6 +266,8 @@ func run() error {
 			Tokens:            tokensHandler,
 			Activity:          activityHandler,
 			Health:            healthHandler,
+			Installer:         installerHandler,
+			Catalog:           catalogHandler,
 			Gateway:           gatewayHandler,
 		}),
 		ReadHeaderTimeout: time.Duration(cfg.ReadHeaderTimeoutSeconds) * time.Second,

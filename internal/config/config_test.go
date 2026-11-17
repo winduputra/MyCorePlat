@@ -44,6 +44,11 @@ func setValidBaseEnv(t *testing.T) {
 	t.Setenv("HEALTHCHECK_TIMEOUT", "")
 	t.Setenv("HEALTHCHECK_MAX_CONCURRENT", "")
 	t.Setenv("ACTIVITY_METADATA_LIMIT", "")
+	t.Setenv("INSTALLER_BASE_URL", "")
+	t.Setenv("INSTALLER_BASE_URL_FILE", "")
+	t.Setenv("INSTALLER_TOKEN", "")
+	t.Setenv("INSTALLER_TOKEN_FILE", "")
+	t.Setenv("INSTALLER_MAX_UPLOAD_BYTES", "")
 }
 
 func TestLoadDefaults(t *testing.T) {
@@ -858,5 +863,87 @@ func TestLoadTrustedProxiesFromEnv(t *testing.T) {
 		if cfg.TrustedProxies[i] != want[i] {
 			t.Fatalf("TrustedProxies[%d] = %q, want %q", i, cfg.TrustedProxies[i], want[i])
 		}
+	}
+}
+
+func TestLoadInstallerSettingsDefaultsDisabled(t *testing.T) {
+	setValidBaseEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.InstallerBaseURL != "" {
+		t.Errorf("InstallerBaseURL = %q, want empty", cfg.InstallerBaseURL)
+	}
+	if cfg.InstallerToken != "" {
+		t.Errorf("InstallerToken should be empty by default")
+	}
+	if cfg.InstallerMaxUploadBytes != defaultInstallerMaxUpload {
+		t.Errorf("InstallerMaxUploadBytes = %d, want %d", cfg.InstallerMaxUploadBytes, defaultInstallerMaxUpload)
+	}
+}
+
+func TestLoadInstallerSettingsFromEnv(t *testing.T) {
+	setValidBaseEnv(t)
+	t.Setenv("INSTALLER_BASE_URL", "http://installer:8090/")
+	t.Setenv("INSTALLER_TOKEN", "installer-token-value")
+	t.Setenv("INSTALLER_MAX_UPLOAD_BYTES", "1048576")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.InstallerBaseURL != "http://installer:8090" {
+		t.Errorf("InstallerBaseURL = %q (trailing slash must be trimmed)", cfg.InstallerBaseURL)
+	}
+	if cfg.InstallerToken != "installer-token-value" {
+		t.Errorf("InstallerToken not loaded")
+	}
+	if cfg.InstallerMaxUploadBytes != 1048576 {
+		t.Errorf("InstallerMaxUploadBytes = %d", cfg.InstallerMaxUploadBytes)
+	}
+}
+
+func TestLoadInstallerSettingsTokenFileTakesPrecedence(t *testing.T) {
+	setValidBaseEnv(t)
+	dir := t.TempDir()
+	tokenFile := filepath.Join(dir, "installer-token.txt")
+	if err := os.WriteFile(tokenFile, []byte("  file-token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("INSTALLER_BASE_URL", "http://installer:8090")
+	t.Setenv("INSTALLER_TOKEN", "env-token")
+	t.Setenv("INSTALLER_TOKEN_FILE", tokenFile)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.InstallerToken != "file-token" {
+		t.Errorf("InstallerToken = %q, want the trimmed file value", cfg.InstallerToken)
+	}
+}
+
+func TestLoadInstallerSettingsRejectsInvalid(t *testing.T) {
+	cases := []struct {
+		name     string
+		baseURL  string
+		token    string
+		maxBytes string
+	}{
+		{"bad_scheme", "ftp://installer", "tok", ""},
+		{"token_without_url", "", "tok", ""},
+		{"url_without_token", "http://installer:8090", "", ""},
+		{"bad_max_upload", "http://installer:8090", "tok", "abc"},
+		{"zero_max_upload", "http://installer:8090", "tok", "0"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setValidBaseEnv(t)
+			t.Setenv("INSTALLER_BASE_URL", tc.baseURL)
+			t.Setenv("INSTALLER_TOKEN", tc.token)
+			t.Setenv("INSTALLER_MAX_UPLOAD_BYTES", tc.maxBytes)
+			if _, err := Load(); err == nil {
+				t.Fatal("expected an error")
+			}
+		})
 	}
 }

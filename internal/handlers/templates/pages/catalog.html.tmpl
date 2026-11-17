@@ -1,0 +1,26 @@
+{{define "catalog"}}{{template "public_layout" .}}{{end}}
+{{define "content"}}
+<section class="hero">
+  <h1>Katalog Tool</h1>
+  <p>Kumpulan alat bantu digital untuk mendukung pekerjaan pengadaan barang/jasa. Semua tool di bawah ini dapat digunakan langsung tanpa login.</p>
+</section>
+{{if .Cards}}
+<div class="grid">
+  {{range .Cards}}
+  <a class="card" href="{{.Link}}">
+    {{if .Category}}<span class="cat">{{.Category}}</span>{{end}}
+    <h2>{{.Name}}</h2>
+    {{if .Description}}<p class="desc">{{.Description}}</p>{{end}}
+    <span class="open">
+      Buka tool
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </span>
+  </a>
+  {{end}}
+</div>
+{{else}}
+<div class="empty">
+  <div class="box">Belum ada tool yang tersedia saat ini.</div>
+</div>
+{{end}}
+{{end}}

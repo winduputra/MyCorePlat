@@ -80,7 +80,7 @@ var errBodyTooLarge = errors.New("gateway: request body too large")
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 // hopByHopHeaders are connection-specific and must not be forwarded in either
-// direction (RFC 7230 §6.1).
+// direction (RFC 7230 Â§6.1).
 var hopByHopHeaders = []string{
 	"Connection",
 	"Proxy-Connection",
@@ -102,7 +102,7 @@ var strippedRequestHeaders = []string{
 	"Cookie",
 	"Proxy-Authorization",
 	"X-Csrf-Token",
-	// Internal Core→tool authentication headers: clients cannot supply these.
+	// Internal Coreâ†’tool authentication headers: clients cannot supply these.
 	"X-Signature",
 	"X-Signature-Key-Id",
 	"X-Signature-Timestamp",
@@ -451,7 +451,7 @@ func (g *Gateway) Serve(c *gin.Context) {
 	}
 
 	// Every forwarded request is signed with the tool's own key so the tool can
-	// prove it came from Core (docs/architecture.md §4.4). Signing failures fail
+	// prove it came from Core (docs/architecture.md Â§4.4). Signing failures fail
 	// closed: an unsigned request must never reach a tool.
 	if g.signer != nil {
 		if err := g.signRequest(ctx, outReq, tool); err != nil {

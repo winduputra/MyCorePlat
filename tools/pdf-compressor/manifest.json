@@ -1,0 +1,14 @@
+{
+  "id": "pdf-compressor",
+  "name": "PDF Compressor",
+  "version": "1.0.0",
+  "description": "Compress PDF files to reduce their size using three quality levels.",
+  "category": "Document",
+  "access": "public",
+  "runtime": "python",
+  "upstream": "http://pdf-compressor:8000",
+  "healthcheck": "/health",
+  "displayOrder": 10,
+  "icon": "file-pdf",
+  "schemaVersion": "1"
+}

@@ -77,6 +77,32 @@ func (r *ToolRepository) Create(ctx context.Context, tool *model.Tool) error {
 	return nil
 }
 
+// ReviveBySlug clears the soft-delete marker on any tool row with the slug and
+// returns its id. It is used when reinstalling a tool whose previous row is
+// still present (soft-deleted) and would otherwise collide on uq_tools_slug.
+// It reports service.ErrToolNotFound when no such row exists.
+func (r *ToolRepository) ReviveBySlug(ctx context.Context, slug string) (uint64, error) {
+	var existing model.Tool
+	err := r.db.WithContext(ctx).
+		Unscoped().
+		Where("slug = ?", slug).
+		First(&existing).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, service.ErrToolNotFound
+	}
+	if err != nil {
+		return 0, fmt.Errorf("find tool to revive: %w", err)
+	}
+	if err := r.db.WithContext(ctx).
+		Unscoped().
+		Model(&model.Tool{}).
+		Where("id = ?", existing.ID).
+		Update("deleted_at", nil).Error; err != nil {
+		return 0, fmt.Errorf("revive tool: %w", err)
+	}
+	return existing.ID, nil
+}
+
 // Update persists changes to an existing tool. updated_at is refreshed
 // server-side.
 func (r *ToolRepository) Update(ctx context.Context, tool *model.Tool) error {

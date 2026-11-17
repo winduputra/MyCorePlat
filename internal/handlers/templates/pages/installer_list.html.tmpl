@@ -1,0 +1,80 @@
+{{define "installer_list"}}{{template "layout" .}}{{end}}
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h2 class="page-title">Installer Tool</h2>
+    <p class="muted">Unggah paket ZIP untuk memasang tool baru tanpa mengubah kode Core.</p>
+  </div>
+</div>
+
+{{if .Notice}}<div class="alert alert-info">{{.Notice}}</div>{{end}}
+{{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
+
+<div class="card">
+  <div class="card-head"><h3>Pasang tool baru</h3></div>
+  <div class="card-body">
+    <p class="muted" style="margin-top:0">
+      Paket harus berupa file <code>.zip</code> yang berisi <code>manifest.json</code> dan
+      <code>Dockerfile</code> di direktori paling atas. Ukuran maksimum
+      {{.MaxUploadBytes}} byte.
+    </p>
+    <form method="post" action="/admin/installer" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="form-grid">
+        <div class="field full">
+          <label for="package">Paket tool (.zip)</label>
+          <input type="file" id="package" name="package" accept=".zip,application/zip" required>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn" {{if not .Configured}}disabled{{end}}>Unggah &amp; Pasang</button>
+        <a class="btn secondary" href="/admin/tools">Kembali ke daftar tool</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h3>Tool terpasang</h3></div>
+  <div class="card-body flush">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Slug</th>
+            <th>Status</th>
+            <th>Versi</th>
+            <th>Container</th>
+            <th>Keterangan</th>
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Installations}}
+          <tr id="install-{{.Slug}}">
+            <td class="mono">{{.Slug}}</td>
+            <td><span class="badge">{{.Status}}</span></td>
+            <td>{{if .Version}}{{.Version}}{{else}}-{{end}}</td>
+            <td class="mono">{{if .ContainerName}}{{.ContainerName}}{{else}}-{{end}}</td>
+            <td class="muted">
+              {{if .ErrorCode}}<strong>{{.ErrorCode}}</strong>{{end}}
+              {{if .ErrorMessage}}{{.ErrorMessage}}{{end}}
+            </td>
+            <td class="cell-actions">
+              <button class="btn small" hx-post="/admin/installer/{{.Slug}}/enable"
+                hx-confirm="Aktifkan tool {{.Slug}}?" hx-target="#install-{{.Slug}}" hx-swap="outerHTML">Aktifkan</button>
+              <button class="btn small secondary" hx-post="/admin/installer/{{.Slug}}/disable"
+                hx-confirm="Nonaktifkan tool {{.Slug}}?" hx-target="#install-{{.Slug}}" hx-swap="outerHTML">Nonaktifkan</button>
+              <button class="btn small danger" hx-delete="/admin/installer/{{.Slug}}"
+                hx-confirm="Hapus tool {{.Slug}} beserta container dan secret-nya?" hx-target="#install-{{.Slug}}" hx-swap="outerHTML">Hapus</button>
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="6" class="empty">Belum ada tool yang dipasang melalui installer.</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{{end}}

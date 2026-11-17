@@ -81,6 +81,10 @@ const (
 	// maxActivityMetadataLimit keeps an operator from configuring an audit row
 	// large enough to bloat the table or the admin listing.
 	maxActivityMetadataLimit = 16384
+
+	// defaultInstallerMaxUpload bounds a tool package uploaded through the
+	// admin dashboard before Core streams it to the installer service.
+	defaultInstallerMaxUpload int64 = 64 << 20
 )
 
 // Config holds the runtime configuration for the Core application.
@@ -187,6 +191,17 @@ type Config struct {
 	// ActivityMetadataLimit caps the stored activity_logs.metadata_json size in
 	// bytes. Larger documents are replaced by a truncation marker.
 	ActivityMetadataLimit int
+
+	// InstallerBaseURL is the internal base URL of the tool installer service
+	// (e.g. http://installer:8090). An empty value disables the admin tool
+	// upload UI entirely, so the installer is strictly opt-in.
+	InstallerBaseURL string
+	// InstallerToken authenticates Core to the installer service. It is a
+	// shared secret and is never logged. An empty value disables the upload UI.
+	InstallerToken string
+	// InstallerMaxUploadBytes caps the size of a tool package accepted by the
+	// Core upload handler before it is streamed to the installer service.
+	InstallerMaxUploadBytes int64
 }
 
 // Load reads configuration from the environment and validates it.
@@ -243,6 +258,10 @@ func Load() (*Config, error) {
 	}
 
 	if err := cfg.loadObservabilitySettings(); err != nil {
+		return nil, err
+	}
+
+	if err := cfg.loadInstallerSettings(); err != nil {
 		return nil, err
 	}
 
@@ -306,6 +325,71 @@ func (c *Config) loadObservabilitySettings() error {
 	}
 
 	return nil
+}
+
+// loadInstallerSettings resolves the tool-installer integration settings.
+// The installer is optional: leaving INSTALLER_BASE_URL empty disables the
+// admin upload UI while everything else keeps working. When a base URL is
+// configured the token must also be present, so a misconfiguration can never
+// result in unauthenticated install requests.
+func (c *Config) loadInstallerSettings() error {
+	c.InstallerMaxUploadBytes = defaultInstallerMaxUpload
+
+	base, err := loadOptionalSecret("INSTALLER_BASE_URL_FILE", "INSTALLER_BASE_URL")
+	if err != nil {
+		return err
+	}
+	base = strings.TrimRight(strings.TrimSpace(base), "/")
+	if base != "" && !strings.HasPrefix(base, "http://") && !strings.HasPrefix(base, "https://") {
+		return fmt.Errorf("INSTALLER_BASE_URL must start with http:// or https://")
+	}
+
+	token, err := loadOptionalSecret("INSTALLER_TOKEN_FILE", "INSTALLER_TOKEN")
+	if err != nil {
+		return err
+	}
+	token = strings.TrimSpace(token)
+
+	if base == "" && token != "" {
+		return fmt.Errorf("INSTALLER_BASE_URL must be set when INSTALLER_TOKEN is provided")
+	}
+	if base != "" && token == "" {
+		return fmt.Errorf("INSTALLER_TOKEN must be set when INSTALLER_BASE_URL is provided")
+	}
+
+	c.InstallerBaseURL = base
+	c.InstallerToken = token
+
+	if v := strings.TrimSpace(os.Getenv("INSTALLER_MAX_UPLOAD_BYTES")); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid INSTALLER_MAX_UPLOAD_BYTES %q: %w", v, err)
+		}
+		if n <= 0 {
+			return fmt.Errorf("INSTALLER_MAX_UPLOAD_BYTES must be positive, got %d", n)
+		}
+		c.InstallerMaxUploadBytes = n
+	}
+
+	return nil
+}
+
+// loadOptionalSecret resolves a secret that may legitimately be absent. The
+// file variant takes precedence over the environment variable. Unlike
+// loadSecret, an empty result is not an error: the caller decides whether the
+// value is required for the current configuration.
+func loadOptionalSecret(fileEnv, env string) (string, error) {
+	if path, ok := os.LookupEnv(fileEnv); ok && path != "" {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("read %s: %w", fileEnv, err)
+		}
+		return string(data), nil
+	}
+	if v, ok := os.LookupEnv(env); ok {
+		return v, nil
+	}
+	return "", nil
 }
 
 // loadTokenSettings resolves the access-token lifecycle settings.

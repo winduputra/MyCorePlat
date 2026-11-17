@@ -1,0 +1,29 @@
+# Files that must never enter the tool build context.
+# Secrets are mounted at runtime, not copied.
+secrets/
+**/secrets/
+*.secret
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Tests and dev files are not needed in the runtime image.
+tests/
+pytest.ini
+
+# Docs / VCS
+.git
+.gitignore
+README.md
+
+# Local artifacts
+*.log
+*.db

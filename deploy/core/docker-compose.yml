@@ -40,10 +40,21 @@ services:
       CSRF_SECRET_FILE: /run/secrets/csrf_secret
       # Per-tool HMAC key files: one <slug>.json per tool, mounted read-only.
       TOOL_HMAC_KEYS_DIR: /run/secrets/tool-hmac
+      # Tool Installer: when set, the admin dashboard can upload tool packages.
+      # Core calls the installer over the internal `tools` network; it never
+      # receives the Docker socket itself.
+      INSTALLER_BASE_URL: http://mycoreplat-installer:8090
+      INSTALLER_TOKEN_FILE: /run/secrets/installer_token
+      # Buffer the whole request body (up to the upload cap) so every proxied
+      # tool request uses the buffered HMAC signature path. Tools built on
+      # ASGI/uvicorn cannot receive HTTP trailers, so the streamed-digest path
+      # is unusable for them; 25 MiB matches GATEWAY_MAX_BODY_BYTES.
+      GATEWAY_SIGN_BUFFER_BYTES: "26214400"
 
     secrets:
       - db_dsn
       - csrf_secret
+      - installer_token
 
     volumes:
       # Read-only directory of per-tool signing keys (provisioned on the host).
@@ -102,3 +113,5 @@ secrets:
     file: ./secrets/db_dsn.txt
   csrf_secret:
     file: ./secrets/csrf_secret.txt
+  installer_token:
+    file: ./secrets/installer_token.txt

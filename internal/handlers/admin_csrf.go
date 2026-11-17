@@ -52,6 +52,9 @@ func withCSRF(c *gin.Context, data any) any {
 	case healthListData:
 		d.setCSRFToken(token)
 		return &d
+	case installerListData:
+		d.setCSRFToken(token)
+		return &d
 	default:
 		return data
 	}

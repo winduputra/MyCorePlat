@@ -1,0 +1,78 @@
+# PDF Compressor — deployment compose for Tools BPBJ.
+#
+# This service is an INDEPENDENT TOOL. It:
+#   * joins only the external `tools` network (shared with Core, internal only),
+#   * publishes NO ports (reachable only through Core's gateway),
+#   * runs as non-root with a read-only root filesystem,
+#   * drops all Linux capabilities,
+#   * has explicit CPU/memory/PID limits.
+#
+# Prerequisites (created once on the host by the operator):
+#   docker network create proxy
+#   docker network create --internal tools
+#
+# Start / stop:
+#   docker compose -f tools/pdf-compressor/docker-compose.yml up -d
+#   docker compose -f tools/pdf-compressor/docker-compose.yml down
+
+services:
+  pdf-compressor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tools-bpbj/pdf-compressor:${PDF_COMPRESSOR_VERSION:-latest}
+    container_name: tools-pdf-compressor
+    restart: unless-stopped
+
+    environment:
+      TOOL_SLUG: pdf-compressor
+      TOOL_HMAC_KEYS_DIR: /run/secrets/tool-hmac
+      NONCE_DB_PATH: /tmp/nonces.db
+      HMAC_SKEW_SECONDS: "60"
+      NONCE_TTL_SECONDS: "300"
+      MAX_UPLOAD_BYTES: "26214400"
+      PROCESSING_TIMEOUT_SECONDS: "45"
+      RATE_LIMIT_PER_MINUTE: "20"
+      MAX_CONCURRENCY: "3"
+      GHOSTSCRIPT_BIN: gs
+
+    # Per-tool HMAC key file written by Core's keystore format.
+    # Path: <repo>/tools/pdf-compressor/secrets/tool-hmac/<slug>.json
+    volumes:
+      - ./secrets/tool-hmac:/run/secrets/tool-hmac:ro
+
+    networks:
+      - tools
+
+    # Internal port only — never published to the host.
+    expose:
+      - "8000"
+
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    user: "10001:10001"
+
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  tools:
+    external: true
+    name: tools
