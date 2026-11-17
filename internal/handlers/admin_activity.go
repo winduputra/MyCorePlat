@@ -56,7 +56,10 @@ type activityListData struct {
 	HasNext    bool
 	PrevURL    string
 	NextURL    string
+	CSRFToken  string
 }
+
+func (d *activityListData) setCSRFToken(token string) { d.CSRFToken = token }
 
 // List renders a filtered, paginated view of the audit trail.
 func (h *AdminActivityHandler) List(c *gin.Context) {
@@ -153,7 +156,7 @@ func (h *AdminActivityHandler) render(c *gin.Context, status int, data activityL
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.Header("Cache-Control", "no-store")
 	c.Status(status)
-	if err := h.tmpl.ExecuteTemplate(c.Writer, "activity_list", data); err != nil {
+	if err := h.tmpl.ExecuteTemplate(c.Writer, "activity_list", withCSRF(c, data)); err != nil {
 		// Never surface template errors to the client.
 		c.String(http.StatusInternalServerError, "render error")
 	}

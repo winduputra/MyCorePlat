@@ -1,21 +1,52 @@
 {{define "health_list"}}{{template "layout" .}}{{end}}
 
 {{define "content"}}
-{{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
-<table>
-  <thead><tr><th>Tool</th><th>Status</th><th>Terakhir diperiksa</th><th>Waktu respons</th><th>Keterangan</th></tr></thead>
-  <tbody>
-  {{range .Rows}}
-    <tr>
-      <td>{{.Name}} <small>({{.Slug}})</small></td>
-      <td>{{if .LastStatus}}{{.LastStatus}}{{else}}belum diperiksa{{end}}</td>
-      <td>{{timefmtPtr .CheckedAt}}</td>
-      <td>{{if .LatencyMS}}{{.LatencyMS}} ms{{else}}-{{end}}</td>
-      <td>{{.Reason}}</td>
-    </tr>
-  {{else}}
-    <tr><td colspan="5">Belum ada tool.</td></tr>
-  {{end}}
-  </tbody>
-</table>
+{{if .Error}}<div class="alert error" role="alert">{{.Error}}</div>{{end}}
+
+<div class="page-head">
+  <p class="meta">Status kesehatan tool berdasarkan health check terakhir. Status tool tidak berubah otomatis.</p>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2>Status Kesehatan Tool</h2>
+    <span class="muted nowrap">{{len .Rows}} tool</span>
+  </div>
+  <div class="card-body flush">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Tool</th><th>Status</th><th>Terakhir diperiksa</th><th>Waktu respons</th><th>Keterangan</th></tr>
+        </thead>
+        <tbody>
+        {{range .Rows}}
+          <tr>
+            <td>
+              <div class="stack-sm">
+                <strong>{{.Name}}</strong>
+                <code class="muted">{{.Slug}}</code>
+              </div>
+            </td>
+            <td>
+              {{if eq .LastStatus "healthy"}}<span class="badge healthy">Sehat</span>
+              {{else if eq .LastStatus "unhealthy"}}<span class="badge unhealthy">Bermasalah</span>
+              {{else}}<span class="badge draft plain">belum diperiksa</span>{{end}}
+            </td>
+            <td class="nowrap">{{timefmtPtr .CheckedAt}}</td>
+            <td class="nowrap">{{if .LatencyMS}}{{.LatencyMS}} ms{{else}}<span class="muted">-</span>{{end}}</td>
+            <td class="muted">{{if .Reason}}{{.Reason}}{{else}}-{{end}}</td>
+          </tr>
+        {{else}}
+          <tr><td colspan="5">
+            <div class="empty">
+              <div class="big">Belum ada tool</div>
+              <div>Tool yang terdaftar akan tampil di sini beserta status kesehatannya.</div>
+            </div>
+          </td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
 {{end}}

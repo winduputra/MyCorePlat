@@ -1,34 +1,81 @@
 {{define "activity_list"}}{{template "layout" .}}{{end}}
 
 {{define "content"}}
-{{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
-<form method="get" action="/admin/activity">
-  <label>Action <input type="text" name="action" value="{{.Filter.Action}}"></label>
-  <label>Entity <input type="text" name="entity_type" value="{{.Filter.EntityType}}"></label>
-  <label>Tool ID <input type="number" name="tool_id" value="{{.Filter.ToolIDValue}}"></label>
-  <label>Dari <input type="date" name="from" value="{{.Filter.FromValue}}"></label>
-  <label>Sampai <input type="date" name="to" value="{{.Filter.ToValue}}"></label>
-  <button type="submit">Filter</button>
-  <a href="/admin/activity">Reset</a>
-</form>
-<table>
-  <thead><tr><th>Waktu</th><th>Aktor</th><th>Action</th><th>Entity</th><th>Tool</th><th>IP</th></tr></thead>
-  <tbody>
-  {{range .Entries}}
-    <tr>
-      <td>{{timefmt .CreatedAt}}</td>
-      <td>{{if .ActorID}}{{.ActorType}}#{{.ActorID}}{{else}}{{.ActorType}}{{end}}</td>
-      <td>{{.Action}}</td>
-      <td>{{if .EntityType}}{{deref .EntityType}}{{if .EntityID}}#{{.EntityID}}{{end}}{{end}}</td>
-      <td>{{if .ToolID}}{{.ToolID}}{{end}}</td>
-      <td>{{if .IPAddress}}{{deref .IPAddress}}{{end}}</td>
-    </tr>
-  {{else}}
-    <tr><td colspan="6">Belum ada aktivitas.</td></tr>
-  {{end}}
-  </tbody>
-</table>
-<p>Total: {{.Total}} — Halaman {{.Page}} dari {{.TotalPages}}
-{{if .HasPrev}}<a href="{{.PrevURL}}">Sebelumnya</a>{{end}}
-{{if .HasNext}}<a href="{{.NextURL}}">Berikutnya</a>{{end}}</p>
+{{if .Error}}<div class="alert error" role="alert">{{.Error}}</div>{{end}}
+
+<div class="card">
+  <div class="card-head"><h2>Filter</h2></div>
+  <div class="card-body">
+    <form method="get" action="/admin/activity">
+      <div class="filter-bar">
+        <div class="field">
+          <label for="f_action">Action</label>
+          <input id="f_action" type="text" name="action" value="{{.Filter.Action}}" placeholder="mis. tool.create">
+        </div>
+        <div class="field">
+          <label for="f_entity">Entity</label>
+          <input id="f_entity" type="text" name="entity_type" value="{{.Filter.EntityType}}" placeholder="mis. tool">
+        </div>
+        <div class="field">
+          <label for="f_tool">Tool ID</label>
+          <input id="f_tool" type="number" name="tool_id" value="{{.Filter.ToolIDValue}}">
+        </div>
+        <div class="field">
+          <label for="f_from">Dari</label>
+          <input id="f_from" type="date" name="from" value="{{.Filter.FromValue}}">
+        </div>
+        <div class="field">
+          <label for="f_to">Sampai</label>
+          <input id="f_to" type="date" name="to" value="{{.Filter.ToValue}}">
+        </div>
+        <div class="filter-actions">
+          <button class="btn" type="submit">Filter</button>
+          <a class="btn ghost" href="/admin/activity">Reset</a>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2>Riwayat Aktivitas</h2>
+    <span class="muted nowrap">Total: {{.Total}}</span>
+  </div>
+  <div class="card-body flush">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Waktu</th><th>Aktor</th><th>Action</th><th>Entity</th><th>Tool</th><th>IP</th></tr>
+        </thead>
+        <tbody>
+        {{range .Entries}}
+          <tr>
+            <td class="nowrap">{{timefmt .CreatedAt}}</td>
+            <td>{{if .ActorID}}{{.ActorType}}#{{.ActorID}}{{else}}{{.ActorType}}{{end}}</td>
+            <td><code>{{.Action}}</code></td>
+            <td>{{if .EntityType}}{{deref .EntityType}}{{if .EntityID}}#{{.EntityID}}{{end}}{{else}}<span class="muted">-</span>{{end}}</td>
+            <td>{{if .ToolID}}{{.ToolID}}{{else}}<span class="muted">-</span>{{end}}</td>
+            <td class="mono nowrap">{{if .IPAddress}}{{deref .IPAddress}}{{else}}<span class="muted">-</span>{{end}}</td>
+          </tr>
+        {{else}}
+          <tr><td colspan="6">
+            <div class="empty">
+              <div class="big">Belum ada aktivitas</div>
+              <div>Riwayat tindakan admin akan muncul di sini.</div>
+            </div>
+          </td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    <div class="pager">
+      <span>Halaman {{.Page}} dari {{.TotalPages}}</span>
+      <span class="links">
+        {{if .HasPrev}}<a class="btn secondary small" href="{{.PrevURL}}">&larr; Sebelumnya</a>{{end}}
+        {{if .HasNext}}<a class="btn secondary small" href="{{.NextURL}}">Berikutnya &rarr;</a>{{end}}
+      </span>
+    </div>
+  </div>
+</div>
 {{end}}

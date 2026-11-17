@@ -1,20 +1,41 @@
 {{define "token_create"}}{{template "layout" .}}{{end}}
 
 {{define "content"}}
-{{if .Error}}<p role="alert" style="color:#b00">{{.Error}}</p>{{end}}
+{{if .Error}}<div class="alert error" role="alert">{{.Error}}</div>{{end}}
 
-<p>Tool: <strong>{{.Tool.Name}}</strong> (<code>{{.Tool.Slug}}</code>)</p>
-<p><small>Token terikat pada satu tool. Siapa pun yang memiliki token dapat menggunakannya — label penerima bersifat deskriptif, bukan verifikasi identitas.</small></p>
+<div class="page-head">
+  <p class="meta">
+    {{if .Tool}}Tool: <strong>{{.Tool.Name}}</strong> <code>{{.Tool.Slug}}</code>{{end}}
+  </p>
+  <a class="btn ghost" href="/admin/tools/{{.ToolID}}/tokens">&larr; Daftar token</a>
+</div>
 
-<form method="post" action="{{.FormAction}}">
-  <p>
-    <label for="recipient_label">Label penerima (opsional)</label><br>
-    <input id="recipient_label" name="recipient_label" type="text" maxlength="128" placeholder="mis. Bidang PBJ - Andi">
-  </p>
-  <p>
-    <label for="expires_at">Berlaku sampai (wajib)</label><br>
-    <input id="expires_at" name="expires_at" type="datetime-local" required>
-  </p>
-  <p><button type="submit">Buat token</button> <a href="/admin/tools/{{.ToolID}}/tokens">Batal</a></p>
-</form>
+<div class="alert info" role="note">
+  <span>Token terikat pada satu tool. Siapa pun yang memiliki token dapat menggunakannya &mdash; label penerima bersifat deskriptif, bukan verifikasi identitas.</span>
+</div>
+
+<div class="card">
+  <div class="card-head"><h2>Buat Token Baru</h2></div>
+  <div class="card-body">
+    <form method="post" action="{{.FormAction}}">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="form-grid">
+        <div class="field full">
+          <label for="recipient_label">Label penerima (opsional)</label>
+          <input id="recipient_label" name="recipient_label" type="text" maxlength="128" placeholder="mis. Bidang PBJ - Andi">
+          <span class="hint">Hanya untuk identifikasi internal; tidak diverifikasi.</span>
+        </div>
+        <div class="field">
+          <label for="expires_at">Berlaku sampai (wajib)</label>
+          <input id="expires_at" name="expires_at" type="datetime-local" required>
+          <span class="hint">Token tidak dapat digunakan setelah waktu ini.</span>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn" type="submit">Buat token</button>
+        <a class="btn ghost" href="/admin/tools/{{.ToolID}}/tokens">Batal</a>
+      </div>
+    </form>
+  </div>
+</div>
 {{end}}

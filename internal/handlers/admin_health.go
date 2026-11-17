@@ -50,10 +50,13 @@ type healthRow struct {
 }
 
 type healthListData struct {
-	Title string
-	Rows  []healthRow
-	Error string
+	Title     string
+	Rows      []healthRow
+	Error     string
+	CSRFToken string
 }
+
+func (d *healthListData) setCSRFToken(token string) { d.CSRFToken = token }
 
 // List renders the health dashboard.
 func (h *AdminHealthHandler) List(c *gin.Context) {
@@ -88,7 +91,7 @@ func (h *AdminHealthHandler) render(c *gin.Context, status int, data healthListD
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.Header("Cache-Control", "no-store")
 	c.Status(status)
-	if err := h.tmpl.ExecuteTemplate(c.Writer, "health_list", data); err != nil {
+	if err := h.tmpl.ExecuteTemplate(c.Writer, "health_list", withCSRF(c, data)); err != nil {
 		c.String(http.StatusInternalServerError, "render error")
 	}
 }

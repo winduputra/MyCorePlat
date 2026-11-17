@@ -110,10 +110,13 @@ func NewAdminToolsHandler(tools ToolService, _ AdminToolsOptions) (*AdminToolsHa
 
 // toolListData is the view model for the list page.
 type toolListData struct {
-	Title string
-	Tools []model.Tool
-	Error string
+	Title     string
+	Tools     []model.Tool
+	Error     string
+	CSRFToken string
 }
+
+func (d *toolListData) setCSRFToken(token string) { d.CSRFToken = token }
 
 // toolFormData is the view model for the create/edit form.
 type toolFormData struct {
@@ -121,7 +124,10 @@ type toolFormData struct {
 	Tool       model.Tool
 	FormAction string
 	Error      string
+	CSRFToken  string
 }
+
+func (d *toolFormData) setCSRFToken(token string) { d.CSRFToken = token }
 
 // List renders the tool registry table.
 func (h *AdminToolsHandler) List(c *gin.Context) {
@@ -254,7 +260,7 @@ func (h *AdminToolsHandler) render(c *gin.Context, status int, name string, data
 		c.String(http.StatusInternalServerError, "render error")
 		return
 	}
-	if err := set.ExecuteTemplate(c.Writer, name, data); err != nil {
+	if err := set.ExecuteTemplate(c.Writer, name, withCSRF(c, data)); err != nil {
 		// Headers are already written; log-free fail-safe response.
 		c.String(status, "render error")
 	}

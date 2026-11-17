@@ -1,34 +1,67 @@
 {{define "tool_list"}}{{template "layout" .}}{{end}}
 
 {{define "content"}}
-{{if .Error}}<p role="alert" style="color:#b00">{{.Error}}</p>{{end}}
-<p><a href="/admin/tools/new" role="button">Tambah Tool</a></p>
-<table>
-  <thead>
-    <tr>
-      <th>Slug</th><th>Nama</th><th>Status</th><th>Access</th><th>Upstream</th><th>Aksi</th>
-    </tr>
-  </thead>
-  <tbody id="tool-rows">
-    {{range .Tools}}
-    <tr id="tool-{{.ID}}">
-      <td>{{.Slug}}</td>
-      <td>{{.Name}}</td>
-      <td>{{.Status}}</td>
-      <td>{{.AccessType}}</td>
-      <td>{{if .UpstreamURL}}{{.UpstreamURL}}{{end}}</td>
-      <td>
-        <a href="/admin/tools/{{.ID}}/edit">Edit</a>
-        <button hx-post="/admin/tools/{{.ID}}/delete"
-                hx-confirm="Hapus tool {{.Name}}?"
-                hx-target="#tool-{{.ID}}"
-                hx-swap="outerHTML">Hapus</button>
-      </td>
-    </tr>
-    {{else}}
-    <tr><td colspan="6">Belum ada tool.</td></tr>
-    {{end}}
-  </tbody>
-</table>
-<p>{{if eq (len .Tools) 0}}0{{else}}{{len .Tools}}{{end}} tool.</p>
+{{if .Error}}<div class="alert error" role="alert">{{.Error}}</div>{{end}}
+
+<div class="page-head">
+  <p class="meta">Kelola katalog tool publik dan toolbertoken akses.</p>
+  <a class="btn" href="/admin/tools/new">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    Tambah Tool
+  </a>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2>Daftar Tool</h2>
+    <span class="muted nowrap">{{if eq (len .Tools) 0}}0{{else}}{{len .Tools}}{{end}} tool</span>
+  </div>
+  <div class="card-body flush">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Slug</th><th>Nama</th><th>Status</th><th>Access</th><th>Upstream</th><th style="text-align:right">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="tool-rows">
+          {{range .Tools}}
+          <tr id="tool-{{.ID}}">
+            <td><code>{{.Slug}}</code></td>
+            <td><strong>{{.Name}}</strong></td>
+            <td>
+              {{if eq .Status "active"}}<span class="badge active">Aktif</span>
+              {{else if eq .Status "maintenance"}}<span class="badge maintenance">Maintenance</span>
+              {{else if eq .Status "disabled"}}<span class="badge disabled">Nonaktif</span>
+              {{else}}<span class="badge draft">Draft</span>{{end}}
+            </td>
+            <td>
+              {{if eq .AccessType "token"}}<span class="badge token plain">Token</span>
+              {{else}}<span class="badge public plain">Public</span>{{end}}
+            </td>
+            <td class="muted mono nowrap">{{if .UpstreamURL}}{{.UpstreamURL}}{{else}}-{{end}}</td>
+            <td>
+              <div class="cell-actions">
+                <a class="btn secondary small" href="/admin/tools/{{.ID}}/edit">Edit</a>
+                <button class="btn danger small" type="button"
+                        hx-post="/admin/tools/{{.ID}}/delete"
+                        hx-confirm="Hapus tool {{.Name}}?"
+                        hx-target="#tool-{{.ID}}"
+                        hx-swap="outerHTML">Hapus</button>
+              </div>
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="6">
+            <div class="empty">
+              <div class="big">Belum ada tool</div>
+              <div>Tambahkan tool pertama untuk mulai mengelola katalog.</div>
+            </div>
+          </td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
 {{end}}

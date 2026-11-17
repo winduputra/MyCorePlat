@@ -110,7 +110,10 @@ type tokenListData struct {
 	Error     string
 	AnyLive   bool
 	NoticeCSR string
+	CSRFToken string
 }
+
+func (d *tokenListData) setCSRFToken(token string) { d.CSRFToken = token }
 
 // createdToken carries the one-time plaintext shown immediately after creation.
 // It is never persisted or re-read.
@@ -127,7 +130,10 @@ type tokenCreateData struct {
 	ToolID     uint64
 	FormAction string
 	Error      string
+	CSRFToken  string
 }
+
+func (d *tokenCreateData) setCSRFToken(token string) { d.CSRFToken = token }
 
 // List renders the token table for one tool. It never shows a plaintext token.
 func (h *AdminTokensHandler) List(c *gin.Context) {
@@ -312,7 +318,7 @@ func (h *AdminTokensHandler) render(c *gin.Context, status int, name string, dat
 		c.String(http.StatusInternalServerError, "render error")
 		return
 	}
-	if err := set.ExecuteTemplate(c.Writer, name, data); err != nil {
+	if err := set.ExecuteTemplate(c.Writer, name, withCSRF(c, data)); err != nil {
 		c.String(status, "render error")
 	}
 }

@@ -1,49 +1,82 @@
 {{define "token_list"}}{{template "layout" .}}{{end}}
 
 {{define "content"}}
-{{if .Error}}<p role="alert" style="color:#b00">{{.Error}}</p>{{end}}
+{{if .Error}}<div class="alert error" role="alert">{{.Error}}</div>{{end}}
+
+<div class="page-head">
+  <p class="meta">
+    {{if .Tool}}Tool: <strong>{{.Tool.Name}}</strong> <code>{{.Tool.Slug}}</code>{{end}}
+  </p>
+  <div class="filter-actions">
+    <a class="btn ghost" href="/admin/tools">&larr; Daftar tool</a>
+    <a class="btn" href="/admin/tools/{{.ToolID}}/tokens/new">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      Buat Token
+    </a>
+  </div>
+</div>
 
 {{if .Created}}
-<section style="border:1px solid #090;background:#efe;padding:1rem;margin-bottom:1rem">
-  <h2>Token dibuat — salin sekarang</h2>
-  <p><strong>Token ini hanya ditampilkan sekali.</strong> Setelah halaman ini ditutup, nilainya tidak dapat dilihat lagi.</p>
-  <p>Label: {{if .Created.Label}}{{.Created.Label}}{{else}}(tanpa label){{end}}</p>
-  <p>Berlaku sampai: {{timefmt .Created.ExpiresAt}}</p>
-  <p><code id="token-plaintext" style="word-break:break-all">{{.Created.Plaintext}}</code></p>
-  <p><small>Simpan di tempat aman. Siapa pun yang memiliki token ini dapat mengakses tool.</small></p>
-</section>
+<div class="card token-panel">
+  <div class="card-body">
+    <h2 style="margin:0 0 0.25rem;font-size:1rem;color:#166534">Token dibuat &mdash; salin sekarang</h2>
+    <p class="muted" style="margin:0.25rem 0"><strong>Token ini hanya ditampilkan sekali.</strong> Setelah halaman ini ditutup, nilainya tidak dapat dilihat lagi.</p>
+    <p style="margin:0.5rem 0 0">Label: <strong>{{if .Created.Label}}{{.Created.Label}}{{else}}(tanpa label){{end}}</strong> &middot; Berlaku sampai: {{timefmt .Created.ExpiresAt}}</p>
+    <code class="token-value" id="token-plaintext">{{.Created.Plaintext}}</code>
+    <p class="muted" style="margin:0"><small>Simpan di tempat aman. Siapa pun yang memiliki token ini dapat mengakses tool.</small></p>
+  </div>
+</div>
 {{end}}
 
-<p><a href="/admin/tools/{{.ToolID}}/tokens/new">Buat Token</a> | <a href="/admin/tools">Kembali ke daftar tool</a></p>
-
-<table border="1" cellpadding="6" cellspacing="0" id="token-rows">
-  <thead>
-    <tr>
-      <th>Prefix</th><th>Label</th><th>Dibuat</th><th>Kedaluwarsa</th><th>Terakhir dipakai</th><th>Status</th><th>Aksi</th>
-    </tr>
-  </thead>
-  <tbody>
-    {{range .Tokens}}
-    <tr id="token-{{.ID}}">
-      <td><code>{{.TokenPrefix}}</code></td>
-      <td>{{deref .RecipientLabel}}</td>
-      <td>{{timefmt .CreatedAt}}</td>
-      <td>{{timefmt .ExpiresAt}}</td>
-      <td>{{timefmtPtr .LastUsedAt}}</td>
-      <td>{{if .RevokedAt}}Dicabut{{else}}{{if .IsLive}}Aktif{{else}}Kedaluwarsa{{end}}{{end}}</td>
-      <td>
-        {{if .RevokedAt}}<span>-</span>{{else}}
-        <button hx-post="/admin/tools/{{$.ToolID}}/tokens/{{.ID}}/revoke"
-                hx-confirm="Cabut token ini? Akses akan langsung berhenti."
-                hx-target="#token-{{.ID}}"
-                hx-swap="outerHTML">Cabut</button>
-        {{end}}
-      </td>
-    </tr>
-    {{else}}
-    <tr><td colspan="7">Belum ada token.</td></tr>
-    {{end}}
-  </tbody>
-</table>
-<p>Total: {{len .Tokens}} token.</p>
+<div class="card">
+  <div class="card-head">
+    <h2>Daftar Token</h2>
+    <span class="muted nowrap">Total: {{len .Tokens}} token</span>
+  </div>
+  <div class="card-body flush">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Prefix</th><th>Label</th><th>Dibuat</th><th>Kedaluwarsa</th><th>Terakhir dipakai</th><th>Status</th><th style="text-align:right">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="token-rows">
+          {{range .Tokens}}
+          <tr id="token-{{.ID}}">
+            <td><code>{{.TokenPrefix}}</code></td>
+            <td>{{if .RecipientLabel}}{{deref .RecipientLabel}}{{else}}<span class="muted">-</span>{{end}}</td>
+            <td class="nowrap">{{timefmt .CreatedAt}}</td>
+            <td class="nowrap">{{timefmt .ExpiresAt}}</td>
+            <td class="nowrap">{{timefmtPtr .LastUsedAt}}</td>
+            <td>
+              {{if .RevokedAt}}<span class="badge revoked">Dicabut</span>
+              {{else if .IsLive}}<span class="badge active">Aktif</span>
+              {{else}}<span class="badge expired">Kedaluwarsa</span>{{end}}
+            </td>
+            <td>
+              <div class="cell-actions">
+                {{if .RevokedAt}}<span class="muted">-</span>{{else}}
+                <button class="btn danger small" type="button"
+                        hx-post="/admin/tools/{{$.ToolID}}/tokens/{{.ID}}/revoke"
+                        hx-confirm="Cabut token ini? Akses akan langsung berhenti."
+                        hx-target="#token-{{.ID}}"
+                        hx-swap="outerHTML">Cabut</button>
+                {{end}}
+              </div>
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="7">
+            <div class="empty">
+              <div class="big">Belum ada token</div>
+              <div>Buat token untuk memberi akses ke tool ini.</div>
+            </div>
+          </td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
 {{end}}
