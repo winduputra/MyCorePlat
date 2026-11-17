@@ -175,7 +175,7 @@ func (h *AuthHandler) LoginSubmit(c *gin.Context) {
 	h.setSessionCookie(c, plaintext, h.opts.SessionTTL, false)
 	// The pre-auth CSRF token is single-use: drop it once a real session exists.
 	h.setPreAuthCSRFCookie(c, "")
-	c.Redirect(http.StatusSeeOther, "/admin")
+	c.Redirect(http.StatusSeeOther, "/admin/tools")
 }
 
 // retryAfterSeconds returns a conservative positive integer number of seconds
