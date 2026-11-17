@@ -40,6 +40,14 @@ type AdminToolsHandler struct {
 	tools    ToolService
 	tmpl     map[string]*template.Template
 	activity ActivityRecorder
+	// ipResolver derives the client address for audit rows. Nil trusts only the
+	// TCP peer (default).
+	ipResolver *service.ClientIPResolver
+}
+
+// SetClientIPResolver configures client-address derivation for audit logging.
+func (h *AdminToolsHandler) SetClientIPResolver(resolver *service.ClientIPResolver) {
+	h.ipResolver = resolver
 }
 
 // SetActivityRecorder attaches the audit recorder. Nil disables auditing.
@@ -59,7 +67,7 @@ func (h *AdminToolsHandler) recordTool(c *gin.Context, action string, tool *mode
 		EntityType: service.EntityTypeTool,
 		EntityID:   &tool.ID,
 		ToolID:     &tool.ID,
-		IPAddress:  c.ClientIP(),
+		IPAddress:  clientAddr(c, h.ipResolver),
 		UserAgent:  c.Request.UserAgent(),
 		Metadata: map[string]any{
 			"slug":        tool.Slug,

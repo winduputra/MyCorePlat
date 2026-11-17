@@ -25,6 +25,7 @@ func setValidBaseEnv(t *testing.T) {
 	t.Setenv("CSRF_SECRET_FILE", "")
 	t.Setenv("PREAUTH_CSRF_TTL", "")
 	t.Setenv("TRUSTED_ORIGIN", "")
+	t.Setenv("TRUSTED_PROXIES", "")
 	t.Setenv("UPSTREAM_ALLOWED_HOSTS", "")
 	t.Setenv("UPSTREAM_ALLOWED_CIDRS", "")
 	t.Setenv("GATEWAY_MAX_BODY_BYTES", "")
@@ -824,5 +825,38 @@ func TestLoadObservabilitySettingsRejectsInvalid(t *testing.T) {
 				t.Fatalf("expected error for %s=%s", tc.key, tc.value)
 			}
 		})
+	}
+}
+
+// TestLoadTrustedProxiesDefaultsEmpty asserts the safe default: no proxy is
+// trusted, so forwarded headers are ignored unless explicitly configured.
+func TestLoadTrustedProxiesDefaultsEmpty(t *testing.T) {
+	setValidBaseEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.TrustedProxies) != 0 {
+		t.Fatalf("TrustedProxies = %v, want empty by default", cfg.TrustedProxies)
+	}
+}
+
+// TestLoadTrustedProxiesFromEnv parses a comma-separated list, trimming
+// whitespace and dropping empty entries while preserving order.
+func TestLoadTrustedProxiesFromEnv(t *testing.T) {
+	setValidBaseEnv(t)
+	t.Setenv("TRUSTED_PROXIES", " 172.18.0.3 , 10.0.0.2 ,, 172.19.0.0/16 ")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := []string{"172.18.0.3", "10.0.0.2", "172.19.0.0/16"}
+	if len(cfg.TrustedProxies) != len(want) {
+		t.Fatalf("TrustedProxies = %v, want %v", cfg.TrustedProxies, want)
+	}
+	for i := range want {
+		if cfg.TrustedProxies[i] != want[i] {
+			t.Fatalf("TrustedProxies[%d] = %q, want %q", i, cfg.TrustedProxies[i], want[i])
+		}
 	}
 }

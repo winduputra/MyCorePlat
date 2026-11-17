@@ -86,6 +86,7 @@ Semua variabel berikut adalah yang **benar-benar dibaca** aplikasi:
 | `CSRF_SECRET_FILE` | `/run/secrets/csrf_secret` | Path file CSRF key |
 | `PREAUTH_CSRF_TTL` | `10m` | Umur token CSRF pra-login (maks 10m) |
 | `TRUSTED_ORIGIN` | `https://tools.example.go.id` | Domain publik Core (untuk cek Origin) |
+| `TRUSTED_PROXIES` | `172.18.0.3` | Daftar IP/CIDR reverse proxy terpercaya (lihat �4.1.1). Kosong = tidak mempercayai proxy mana pun |
 | `UPSTREAM_ALLOWED_HOSTS` | `image-compressor,pdf-tool` | **Allowlist hostname** tool (default-deny) |
 | `UPSTREAM_ALLOWED_CIDRS` | `172.16.0.0/12` | Allowlist CIDR IP upstream (default sesuai desain Phase 0) |
 | `GATEWAY_MAX_BODY_BYTES` | `26214400` | Batas ukuran body (25 MiB) |
@@ -103,6 +104,42 @@ Semua variabel berikut adalah yang **benar-benar dibaca** aplikasi:
 | `HEALTHCHECK_TIMEOUT` | `5s` | Timeout tiap health check |
 | `HEALTHCHECK_MAX_CONCURRENT` | `5` | Maksimum health check bersamaan |
 | `ACTIVITY_METADATA_LIMIT` | `2048` | Batas ukuran metadata activity log |
+
+#### 4.1.1 Resolusi Client IP & Trusted Proxy (`TRUSTED_PROXIES`)
+
+Core berjalan di belakang Nginx Proxy Manager (NPM). Tanpa konfigurasi khusus,
+koneksi yang diterima Core berasal dari IP container NPM (mis. `172.18.0.3`),
+sehingga rate limit login, throttling token, dan log audit akan mencatat IP NPM
+untuk **semua** pengunjung. Untuk memperbaiki ini, set `TRUSTED_PROXIES` ke
+daftar **spesifik** IP/CIDR reverse proxy yang memang berada di jalur trafik:
+
+```
+TRUSTED_PROXIES=172.18.0.3
+```
+
+Mekanisme keamanan:
+
+- **Default aman:** bila `TRUSTED_PROXIES` kosong, Core hanya memakai alamat TCP
+  peer (`RemoteAddr`) dan **mengabaikan** seluruh header `X-Forwarded-For`. Ini
+  berarti klien yang terhubung langsung tidak dapat memalsukan alamatnya.
+- **Header forwarded hanya dipercaya dari proxy terdaftar:** `X-Forwarded-For`
+  dibaca **hanya** jika koneksi benar-benar berasal dari salah satu IP/CIDR di
+  `TRUSTED_PROXIES`. Untuk koneksi langsung dari IP lain, header diabaikan.
+- **Anti-spoofing multi-hop:** rantai `X-Forwarded-For` ditelusuri dari kanan ke
+  kiri, melewati hop yang terpercaya, dan berhenti pada hop pertama yang tidak
+  terpercaya (klien sebenarnya). Klien tidak bisa "menyelipkan" hop palsu di
+  sisi kiri untuk mengelabui limiter.
+- **Konsisten di semua titik:** hasil resolusi yang sama dipakai untuk rate limit
+  login (`/admin/login`), throttling validasi token di gateway, header
+  `X-Forwarded-For` yang diteruskan ke tool, serta metadata log aktivitas (login,
+  tool, token).
+
+**Penting — jangan** mempercayai seluruh subnet Docker (mis.
+`172.18.0.0/16`) kecuali memang setiap anggota subnet tersebut terpercaya.
+Cukup daftarkan IP container NPM. Bila NPM di-restart dan IP container-nya
+berubah, perbarui `TRUSTED_PROXIES` (atau beri NPM IP statis di network `proxy`).
+Nilai IP (`172.18.0.3`) di sini hanya contoh; verifikasi dengan
+`docker network inspect proxy` di server.
 
 ### 4.2 Secret (file)
 

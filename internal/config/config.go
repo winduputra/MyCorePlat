@@ -121,6 +121,15 @@ type Config struct {
 	// POST as defense in depth. Empty disables the check (e.g. tests/dev).
 	TrustedOrigin string
 
+	// TrustedProxies is the exact list of IP addresses or CIDR ranges of reverse
+	// proxies whose X-Forwarded-For header may be honoured (TRUSTED_PROXIES).
+	// It comes only from server-side configuration, never from a request. An
+	// empty list means no proxy is trusted, so the TCP peer address is always
+	// used and forwarded headers are ignored — the safe default. Configure only
+	// the specific proxy addresses (e.g. the NPM container IP), never the whole
+	// Docker subnet, unless the entire subnet is genuinely trusted.
+	TrustedProxies []string
+
 	// UpstreamAllowedHosts is the exact allowlist of internal service
 	// hostnames that a tool's upstream URL may point at. It comes only from
 	// server-side configuration (UPSTREAM_ALLOWED_HOSTS), never from client
@@ -547,6 +556,12 @@ func (c *Config) loadAuthSettings() error {
 		}
 		c.TrustedOrigin = trimmed
 	}
+
+	// Trusted reverse proxies (TRUSTED_PROXIES). Comma-separated exact IPs or
+	// CIDR ranges. Empty (the default) trusts no proxy, so the TCP peer address
+	// is always used. Validation of each entry happens when the resolver is
+	// built (fail-fast at startup), keeping parsing and trust policy together.
+	c.TrustedProxies = parseHostList(os.Getenv("TRUSTED_PROXIES"))
 
 	c.UpstreamAllowedHosts = parseHostList(os.Getenv("UPSTREAM_ALLOWED_HOSTS"))
 	c.UpstreamAllowedCIDRs = parseHostList(os.Getenv("UPSTREAM_ALLOWED_CIDRS"))

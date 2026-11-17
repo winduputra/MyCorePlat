@@ -59,6 +59,16 @@ type AuthHandler struct {
 	// across requests, so they are shared, not per-request.
 	ipLimiter   *service.RateLimiter
 	userLimiter *service.RateLimiter
+	// ipResolver derives the client address. Nil keeps the safe default of
+	// trusting only the TCP peer (no forwarding headers).
+	ipResolver *service.ClientIPResolver
+}
+
+// SetClientIPResolver configures how the handler derives the client address for
+// rate limiting and audit logging. A nil resolver (the default) trusts only the
+// TCP peer address, ignoring any forwarded header. Call before serving requests.
+func (h *AuthHandler) SetClientIPResolver(resolver *service.ClientIPResolver) {
+	h.ipResolver = resolver
 }
 
 // ActivityRecorder is the narrow audit interface handlers need. A nil recorder
@@ -124,12 +134,12 @@ func (h *AuthHandler) LoginSubmit(c *gin.Context) {
 	}
 
 	// Throttle by connecting IP and by submitted username before touching the
-	// auth service. The IP key uses the real peer address only (never
-	// X-Forwarded-For), matching the gateway's client-IP derivation. The
-	// username key uses the submitted value, normalized to lower case so case
-	// variants cannot be used to open fresh buckets.
-	clientAddr := clientIPString(c.Request)
-	ipKey := "login:ip:" + clientAddr
+	// auth service. The IP key uses the resolved client address: the TCP peer by
+	// default, or the forwarded address only when the connection comes from a
+	// configured trusted proxy. The username key uses the submitted value,
+	// normalized to lower case so case variants cannot open fresh buckets.
+	clientAddress := clientAddr(c, h.ipResolver)
+	ipKey := "login:ip:" + clientAddress
 	userKey := "login:user:" + strings.ToLower(strings.TrimSpace(username))
 	if (h.ipLimiter != nil && !h.ipLimiter.Allow(ipKey)) ||
 		(h.userLimiter != nil && !h.userLimiter.Allow(userKey)) {
@@ -139,7 +149,7 @@ func (h *AuthHandler) LoginSubmit(c *gin.Context) {
 		return
 	}
 
-	meta := service.SessionMeta{IPAddress: c.ClientIP(), UserAgent: c.Request.UserAgent()}
+	meta := service.SessionMeta{IPAddress: clientAddr(c, h.ipResolver), UserAgent: c.Request.UserAgent()}
 	plaintext, session, err := h.auth.Login(c.Request.Context(), username, password, meta)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
@@ -185,6 +195,8 @@ func (h *AuthHandler) retryAfterSeconds() int {
 // clientIPString extracts the peer IP from RemoteAddr only. It deliberately
 // does not read X-Forwarded-For or any other client-supplied header, so an
 // attacker cannot escape throttling by rotating forwarded-for values.
+// (Superseded by clientAddr + service.ClientIPResolver for configured trusted
+// proxies; kept for the peer-only fallback used in tests.)
 func clientIPString(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -204,7 +216,7 @@ func (h *AuthHandler) recordAuth(c *gin.Context, session *model.AdminSession, ac
 	entry := service.ActivityEntry{
 		ActorType: model.ActorTypeAdmin,
 		Action:    action,
-		IPAddress: c.ClientIP(),
+		IPAddress: clientAddr(c, h.ipResolver),
 		UserAgent: c.Request.UserAgent(),
 	}
 	if session != nil {

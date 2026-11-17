@@ -85,7 +85,17 @@ func run() error {
 		}
 	}()
 
-	// Authentication stack: repositories → services → handlers.
+	// Trusted reverse-proxy resolution. When TRUSTED_PROXIES is empty (the
+	// default) the TCP peer address is used and forwarded headers are ignored,
+	// so a direct client cannot forge its address. Only when the operator lists
+	// the edge proxy addresses is X-Forwarded-For honoured, and only for
+	// connections that actually come from those addresses.
+	ipResolver, err := service.NewClientIPResolver(cfg.TrustedProxies)
+	if err != nil {
+		return err
+	}
+
+	// Authentication stack: repositories -> services -> handlers.
 	sessionSvc := service.NewSessionService(repository.NewSessionRepository(db), cfg.SessionTTL)
 	authSvc := service.NewAuthService(repository.NewAdminRepository(db), sessionSvc)
 	preAuthCSRF := service.NewPreAuthCSRFService(cfg.CSRFSecret, cfg.PreAuthCSRFTTL)
@@ -97,6 +107,7 @@ func run() error {
 		PreAuthCSRFTTL:  int(cfg.PreAuthCSRFTTL.Seconds()),
 		LoginRateWindow: cfg.LoginRateWindow,
 	})
+	authHandler.SetClientIPResolver(ipResolver)
 	// Login brute-force throttling (Task 14, M-01). The limiter state is shared
 	// across requests (per-IP and per-username), so it must live here rather
 	// than inside a handler. Limits come from configuration, never hardcoded.
@@ -139,6 +150,10 @@ func run() error {
 	toolsHandler.SetActivityRecorder(activitySvc)
 	tokensHandler.SetActivityRecorder(activitySvc)
 
+	// Consistent client-address derivation across logging and throttling.
+	toolsHandler.SetClientIPResolver(ipResolver)
+	tokensHandler.SetClientIPResolver(ipResolver)
+
 	// Per-tool signing keys (Task 8). In production the key directory is
 	// required, so a Core without keys never forwards an unsigned request.
 	var signer gateway.RequestSigner
@@ -172,6 +187,7 @@ func run() error {
 		SignBufferBytes:       cfg.GatewaySignBufferBytes,
 		TokenValidator:        tokenSvc,
 		TokenRateLimiter:      tokenLimiter,
+		ClientIPResolver:      ipResolver,
 	})
 	defer gatewayHandler.Close()
 

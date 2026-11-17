@@ -189,6 +189,11 @@ type Options struct {
 	// TokenRateLimiter throttles token validation attempts per source IP. Nil
 	// disables throttling (acceptable only in tests).
 	TokenRateLimiter TokenRateLimiter
+	// ClientIPResolver derives the caller address for rate limiting and the
+	// X-Forwarded-For header sent to tools. Nil trusts only the TCP peer
+	// address (safe default); a configured resolver honours forwarding headers
+	// only from trusted proxies.
+	ClientIPResolver *service.ClientIPResolver
 }
 
 // TokenValidator authorizes a plaintext access token against the tool it is
@@ -232,6 +237,7 @@ type Gateway struct {
 	allow           service.UpstreamAllowlist
 	tokens          TokenValidator
 	tokenLimiter    TokenRateLimiter
+	ipResolver      *service.ClientIPResolver
 }
 
 // New builds a Gateway with a bounded, purpose-built transport.
@@ -320,6 +326,7 @@ func New(tools ToolLookup, opts Options) *Gateway {
 		allow:           opts.UpstreamAllowlist,
 		tokens:          opts.TokenValidator,
 		tokenLimiter:    opts.TokenRateLimiter,
+		ipResolver:      opts.ClientIPResolver,
 		client: &http.Client{
 			Transport: transport,
 			// Never follow upstream redirects automatically. A redirect Core has
@@ -431,7 +438,7 @@ func (g *Gateway) Serve(c *gin.Context) {
 	outReq.Host = target.Host
 	outReq.Header = c.Request.Header.Clone()
 	sanitizeRequestHeaders(outReq.Header)
-	setForwardedHeaders(outReq, c, tool)
+	setForwardedHeaders(outReq, c, tool, g.ipResolver)
 
 	if g.maxBodyBytes > 0 {
 		if c.Request.ContentLength > g.maxBodyBytes {
@@ -509,7 +516,7 @@ func (g *Gateway) authorizeToken(c *gin.Context, tool *model.Tool) bool {
 	// Throttle per source address before doing any hashing or storage work, so
 	// online guessing is bounded. A nil limiter means throttling is disabled
 	// (tests only).
-	if g.tokenLimiter != nil && !g.tokenLimiter.Allow("tool-token:"+clientIP(c.Request)) {
+	if g.tokenLimiter != nil && !g.tokenLimiter.Allow("tool-token:"+g.clientAddr(c.Request)) {
 		c.Header("Retry-After", "60")
 		writeError(c, http.StatusTooManyRequests, "too many token attempts")
 		return false
@@ -749,14 +756,15 @@ func sanitizeRequestHeaders(h http.Header) {
 }
 
 // setForwardedHeaders injects the forwarding context the tool may log. Values
-// are recomputed from the connection, never inherited from the client.
-func setForwardedHeaders(outReq *http.Request, c *gin.Context, tool *model.Tool) {
+// are recomputed from the connection (or, behind a trusted proxy, from the
+// validated forwarded chain), never inherited verbatim from the client.
+func setForwardedHeaders(outReq *http.Request, c *gin.Context, tool *model.Tool, resolver *service.ClientIPResolver) {
 	proto := "http"
 	if c.Request.TLS != nil {
 		proto = "https"
 	}
 
-	outReq.Header.Set("X-Forwarded-For", clientIP(c.Request))
+	outReq.Header.Set("X-Forwarded-For", clientAddress(c.Request, resolver))
 	outReq.Header.Set("X-Forwarded-Proto", proto)
 	outReq.Header.Set("X-Forwarded-Host", c.Request.Host)
 	outReq.Header.Set("X-Gateway", gatewayIdentifier)
@@ -821,18 +829,29 @@ func writeError(c *gin.Context, status int, message string) {
 	c.String(status, message)
 }
 
-// clientIP derives the caller address from the TCP connection only.
+// clientAddr returns the caller address for r using the gateway's configured
+// resolver, or the TCP peer when no resolver is set.
+func (g *Gateway) clientAddr(r *http.Request) string {
+	return clientAddress(r, g.ipResolver)
+}
+
+// clientAddress derives the caller address for rate limiting and forwarding.
 //
-// It deliberately does not read X-Forwarded-For: without a configured trusted
-// proxy list, honouring that header would let any client choose the address
-// Core reports to tools. Trusting the edge proxy is a deployment concern that
-// must be configured explicitly, not assumed here.
-func clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
+// With a configured resolver it honours X-Forwarded-For only for requests that
+// arrive from a trusted proxy (a client-supplied header on a direct connection
+// is discarded). With no resolver it falls back to the TCP peer address in
+// RemoteAddr only, so any client can be identified without trusting a header it
+// controls.
+func clientAddress(r *http.Request, resolver *service.ClientIPResolver) string {
+	if resolver != nil {
+		return resolver.Resolve(r)
 	}
-	return host
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		if host != "" {
+			return host
+		}
+	}
+	return r.RemoteAddr
 }
 
 // isTimeout reports whether err is a deadline or network timeout.

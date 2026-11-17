@@ -40,6 +40,14 @@ type AdminTokensHandler struct {
 	opts     AdminTokensOptions
 	tmpl     map[string]*template.Template
 	activity ActivityRecorder
+	// ipResolver derives the client address for audit rows. Nil trusts only the
+	// TCP peer (default).
+	ipResolver *service.ClientIPResolver
+}
+
+// SetClientIPResolver configures client-address derivation for audit logging.
+func (h *AdminTokensHandler) SetClientIPResolver(resolver *service.ClientIPResolver) {
+	h.ipResolver = resolver
 }
 
 // SetActivityRecorder attaches the audit recorder. Nil disables auditing.
@@ -59,7 +67,7 @@ func (h *AdminTokensHandler) recordToken(c *gin.Context, action string, toolID, 
 		EntityType: service.EntityTypeToken,
 		EntityID:   &tokenID,
 		ToolID:     &toolID,
-		IPAddress:  c.ClientIP(),
+		IPAddress:  clientAddr(c, h.ipResolver),
 		UserAgent:  c.Request.UserAgent(),
 		Metadata:   metadata,
 	}
