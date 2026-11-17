@@ -1,0 +1,104 @@
+# Tools BPBJ — Core production stack.
+#
+# Deploys ONLY the Core portal/gateway container. It connects to an existing,
+# externally managed MariaDB and sits behind Nginx Proxy Manager.
+#
+# What this file deliberately does NOT do:
+#   * publish any port to the host (NPM reaches Core over the `proxy` network),
+#   * create or manage a database,
+#   * run migrations (they are an explicit, separate step — see
+#     docs/deployment-guide.md),
+#   * mount the Docker socket,
+#   * run privileged,
+#   * contain any secret value (all secrets come from files in ./secrets/).
+#
+# Prerequisites on the host (created once, outside this stack):
+#   docker network create proxy     # NOT internal: edge + DB egress
+#   docker network create --internal tools
+#
+# Usage:
+#   cp core.env.example core.env        # then edit non-secret values
+#   mkdir -p secrets && install -m 0600 /dev/null secrets/db_dsn.txt   # then fill
+#   docker compose -f deploy/core/docker-compose.yml config   # validate
+#   docker compose -f deploy/core/docker-compose.yml up -d
+
+services:
+  core:
+    build:
+      context: ../../
+      dockerfile: deploy/core/Dockerfile
+    image: tools-bpbj/core:${CORE_VERSION:-latest}
+    container_name: mycoreplat-core
+    restart: unless-stopped
+
+    # Non-secret configuration only. Secrets are mounted below.
+    env_file:
+      - ./core.env
+    environment:
+      # Secret file paths (the values inside are never in this file).
+      DB_DSN_FILE: /run/secrets/db_dsn
+      CSRF_SECRET_FILE: /run/secrets/csrf_secret
+      # Per-tool HMAC key files: one <slug>.json per tool, mounted read-only.
+      TOOL_HMAC_KEYS_DIR: /run/secrets/tool-hmac
+
+    secrets:
+      - db_dsn
+      - csrf_secret
+
+    volumes:
+      # Read-only directory of per-tool signing keys (provisioned on the host).
+      - type: bind
+        source: ./secrets/tool-hmac
+        target: /run/secrets/tool-hmac
+        read_only: true
+
+    networks:
+      - proxy
+      - tools
+
+    # Internal HTTP port only. There is intentionally NO `ports:` mapping:
+    # nothing on this container is reachable from the host or the internet.
+    expose:
+      - "8080"
+
+    # Distroless image has no shell, curl or wget; the binary probes itself
+    # against the unauthenticated GET /health endpoint and exits 0/1.
+    healthcheck:
+      test: ["CMD", "/app/core", "-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    # Portable resource limits honored by `docker compose` standalone.
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+
+    # Harden the container: no privilege escalation, read-only root filesystem
+    # (the app writes nothing to disk), and all capabilities dropped.
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+
+networks:
+  # Shared edge network with Nginx Proxy Manager. Must be NON-internal so Core
+  # can also reach the external MariaDB (see docs/deployment-design.md §4).
+  proxy:
+    external: true
+    name: proxy
+  # Internal Core <-> tool network. Created `--internal` on the host, so tools
+  # have no outbound egress and Core's tool-facing traffic cannot escape.
+  tools:
+    external: true
+    name: tools
+
+secrets:
+  db_dsn:
+    file: ./secrets/db_dsn.txt
+  csrf_secret:
+    file: ./secrets/csrf_secret.txt

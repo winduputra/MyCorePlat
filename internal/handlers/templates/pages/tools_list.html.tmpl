@@ -1,0 +1,34 @@
+{{define "tool_list"}}{{template "layout" .}}{{end}}
+
+{{define "content"}}
+{{if .Error}}<p role="alert" style="color:#b00">{{.Error}}</p>{{end}}
+<p><a href="/admin/tools/new" role="button">Tambah Tool</a></p>
+<table>
+  <thead>
+    <tr>
+      <th>Slug</th><th>Nama</th><th>Status</th><th>Access</th><th>Upstream</th><th>Aksi</th>
+    </tr>
+  </thead>
+  <tbody id="tool-rows">
+    {{range .Tools}}
+    <tr id="tool-{{.ID}}">
+      <td>{{.Slug}}</td>
+      <td>{{.Name}}</td>
+      <td>{{.Status}}</td>
+      <td>{{.AccessType}}</td>
+      <td>{{if .UpstreamURL}}{{.UpstreamURL}}{{end}}</td>
+      <td>
+        <a href="/admin/tools/{{.ID}}/edit">Edit</a>
+        <button hx-post="/admin/tools/{{.ID}}/delete"
+                hx-confirm="Hapus tool {{.Name}}?"
+                hx-target="#tool-{{.ID}}"
+                hx-swap="outerHTML">Hapus</button>
+      </td>
+    </tr>
+    {{else}}
+    <tr><td colspan="6">Belum ada tool.</td></tr>
+    {{end}}
+  </tbody>
+</table>
+<p>{{if eq (len .Tools) 0}}0{{else}}{{len .Tools}}{{end}} tool.</p>
+{{end}}

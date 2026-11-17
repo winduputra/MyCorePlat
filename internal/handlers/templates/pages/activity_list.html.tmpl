@@ -1,0 +1,34 @@
+{{define "activity_list"}}{{template "layout" .}}{{end}}
+
+{{define "content"}}
+{{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
+<form method="get" action="/admin/activity">
+  <label>Action <input type="text" name="action" value="{{.Filter.Action}}"></label>
+  <label>Entity <input type="text" name="entity_type" value="{{.Filter.EntityType}}"></label>
+  <label>Tool ID <input type="number" name="tool_id" value="{{.Filter.ToolIDValue}}"></label>
+  <label>Dari <input type="date" name="from" value="{{.Filter.FromValue}}"></label>
+  <label>Sampai <input type="date" name="to" value="{{.Filter.ToValue}}"></label>
+  <button type="submit">Filter</button>
+  <a href="/admin/activity">Reset</a>
+</form>
+<table>
+  <thead><tr><th>Waktu</th><th>Aktor</th><th>Action</th><th>Entity</th><th>Tool</th><th>IP</th></tr></thead>
+  <tbody>
+  {{range .Entries}}
+    <tr>
+      <td>{{timefmt .CreatedAt}}</td>
+      <td>{{if .ActorID}}{{.ActorType}}#{{.ActorID}}{{else}}{{.ActorType}}{{end}}</td>
+      <td>{{.Action}}</td>
+      <td>{{if .EntityType}}{{deref .EntityType}}{{if .EntityID}}#{{.EntityID}}{{end}}{{end}}</td>
+      <td>{{if .ToolID}}{{.ToolID}}{{end}}</td>
+      <td>{{if .IPAddress}}{{deref .IPAddress}}{{end}}</td>
+    </tr>
+  {{else}}
+    <tr><td colspan="6">Belum ada aktivitas.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+<p>Total: {{.Total}} — Halaman {{.Page}} dari {{.TotalPages}}
+{{if .HasPrev}}<a href="{{.PrevURL}}">Sebelumnya</a>{{end}}
+{{if .HasNext}}<a href="{{.NextURL}}">Berikutnya</a>{{end}}</p>
+{{end}}

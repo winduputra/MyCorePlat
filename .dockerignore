@@ -1,0 +1,51 @@
+# Docker build context exclusions (applies to builds from the repo root).
+#
+# The Core image is built with the repository root as context:
+#   docker build -f deploy/core/Dockerfile -t tools-bpbj/core:dev .
+# Docker only reads THIS file (the one at the context root), so keep it here.
+#
+# Goal: never send secrets, local env files, VCS data, docs or build output to
+# the daemon, and never let them slip into the image.
+
+# Secrets and local configuration — NEVER ship these.
+.env
+.env.*
+!.env.example
+*.secret
+secrets/
+**/secrets/
+
+# Version control and editor data.
+.git
+.gitignore
+.gitattributes
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Agent/tooling state.
+.omo/
+
+# Build output and local binaries.
+core
+core.exe
+bin/
+dist/
+*.exe
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Documentation and non-runtime assets.
+docs/
+web/
+*.md
+
+# Dev-only deployment assets (local DB compose + its secret files).
+deploy/dev/
+
+# Keep everything the build actually needs: go.mod, go.sum, cmd/, internal/,
+# pkg/, migrations/ (in case a future build embeds them), deploy/core/.

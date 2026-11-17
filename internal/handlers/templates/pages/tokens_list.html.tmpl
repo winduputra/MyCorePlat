@@ -1,0 +1,49 @@
+{{define "token_list"}}{{template "layout" .}}{{end}}
+
+{{define "content"}}
+{{if .Error}}<p role="alert" style="color:#b00">{{.Error}}</p>{{end}}
+
+{{if .Created}}
+<section style="border:1px solid #090;background:#efe;padding:1rem;margin-bottom:1rem">
+  <h2>Token dibuat — salin sekarang</h2>
+  <p><strong>Token ini hanya ditampilkan sekali.</strong> Setelah halaman ini ditutup, nilainya tidak dapat dilihat lagi.</p>
+  <p>Label: {{if .Created.Label}}{{.Created.Label}}{{else}}(tanpa label){{end}}</p>
+  <p>Berlaku sampai: {{timefmt .Created.ExpiresAt}}</p>
+  <p><code id="token-plaintext" style="word-break:break-all">{{.Created.Plaintext}}</code></p>
+  <p><small>Simpan di tempat aman. Siapa pun yang memiliki token ini dapat mengakses tool.</small></p>
+</section>
+{{end}}
+
+<p><a href="/admin/tools/{{.ToolID}}/tokens/new">Buat Token</a> | <a href="/admin/tools">Kembali ke daftar tool</a></p>
+
+<table border="1" cellpadding="6" cellspacing="0" id="token-rows">
+  <thead>
+    <tr>
+      <th>Prefix</th><th>Label</th><th>Dibuat</th><th>Kedaluwarsa</th><th>Terakhir dipakai</th><th>Status</th><th>Aksi</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Tokens}}
+    <tr id="token-{{.ID}}">
+      <td><code>{{.TokenPrefix}}</code></td>
+      <td>{{deref .RecipientLabel}}</td>
+      <td>{{timefmt .CreatedAt}}</td>
+      <td>{{timefmt .ExpiresAt}}</td>
+      <td>{{timefmtPtr .LastUsedAt}}</td>
+      <td>{{if .RevokedAt}}Dicabut{{else}}{{if .IsLive}}Aktif{{else}}Kedaluwarsa{{end}}{{end}}</td>
+      <td>
+        {{if .RevokedAt}}<span>-</span>{{else}}
+        <button hx-post="/admin/tools/{{$.ToolID}}/tokens/{{.ID}}/revoke"
+                hx-confirm="Cabut token ini? Akses akan langsung berhenti."
+                hx-target="#token-{{.ID}}"
+                hx-swap="outerHTML">Cabut</button>
+        {{end}}
+      </td>
+    </tr>
+    {{else}}
+    <tr><td colspan="7">Belum ada token.</td></tr>
+    {{end}}
+  </tbody>
+</table>
+<p>Total: {{len .Tokens}} token.</p>
+{{end}}

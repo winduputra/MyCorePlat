@@ -1,0 +1,16 @@
+{{define "layout"}}<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} - Tools BPBJ</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowGpMBqOoSnX0DqoTqNcQ1xkdLx6Hh4m5pD2H" crossorigin="anonymous"></script>
+</head>
+<body>
+<main>
+  <nav><a href="/admin/tools">Tools</a> | <form method="post" action="/admin/logout" style="display:inline"><button type="submit">Logout</button></form></nav>
+  <h1>{{.Title}}</h1>
+  {{template "content" .}}
+</main>
+</body>
+</html>{{end}}

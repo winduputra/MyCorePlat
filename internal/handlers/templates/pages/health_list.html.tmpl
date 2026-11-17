@@ -1,0 +1,21 @@
+{{define "health_list"}}{{template "layout" .}}{{end}}
+
+{{define "content"}}
+{{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
+<table>
+  <thead><tr><th>Tool</th><th>Status</th><th>Terakhir diperiksa</th><th>Waktu respons</th><th>Keterangan</th></tr></thead>
+  <tbody>
+  {{range .Rows}}
+    <tr>
+      <td>{{.Name}} <small>({{.Slug}})</small></td>
+      <td>{{if .LastStatus}}{{.LastStatus}}{{else}}belum diperiksa{{end}}</td>
+      <td>{{timefmtPtr .CheckedAt}}</td>
+      <td>{{if .LatencyMS}}{{.LatencyMS}} ms{{else}}-{{end}}</td>
+      <td>{{.Reason}}</td>
+    </tr>
+  {{else}}
+    <tr><td colspan="5">Belum ada tool.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}

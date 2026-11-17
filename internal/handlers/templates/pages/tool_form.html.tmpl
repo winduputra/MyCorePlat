@@ -1,0 +1,41 @@
+{{define "tool_form"}}{{template "layout" .}}{{end}}
+
+{{define "content"}}
+{{if .Error}}<p role="alert" style="color:#b00">{{.Error}}</p>{{end}}
+<form method="post" action="{{.FormAction}}">
+  <label>Slug <input name="slug" value="{{.Tool.Slug}}" required pattern="[a-z0-9]+(-[a-z0-9]+)*"></label>
+  <label>Nama <input name="name" value="{{.Tool.Name}}" required maxlength="128"></label>
+  <label>Deskripsi <textarea name="description" maxlength="512">{{deref .Tool.Description}}</textarea></label>
+  <label>Kategori <input name="category" value="{{deref .Tool.Category}}" maxlength="64"></label>
+  <label>Versi <input name="version" value="{{deref .Tool.Version}}" maxlength="32"></label>
+  <label>Runtime
+    <select name="runtime">
+      <option value=""{{if eq (deref .Tool.Runtime) ""}} selected{{end}}>-</option>
+      <option value="python"{{if eq (deref .Tool.Runtime) "python"}} selected{{end}}>python</option>
+      <option value="php"{{if eq (deref .Tool.Runtime) "php"}} selected{{end}}>php</option>
+      <option value="node"{{if eq (deref .Tool.Runtime) "node"}} selected{{end}}>node</option>
+      <option value="go"{{if eq (deref .Tool.Runtime) "go"}} selected{{end}}>go</option>
+    </select>
+  </label>
+  <label>Access
+    <select name="access_type">
+      <option value="public"{{if or (eq .Tool.AccessType "public") (eq .Tool.AccessType "")}} selected{{end}}>public</option>
+      <option value="token"{{if eq .Tool.AccessType "token"}} selected{{end}}>token</option>
+    </select>
+  </label>
+  <label>Upstream URL <input name="upstream_url" value="{{.Tool.UpstreamURL}}" required placeholder="http://service-name:8000"></label>
+  <label>Healthcheck Path <input name="healthcheck_path" value="{{.Tool.HealthcheckPath}}" required pattern="/.*"></label>
+  <label>Status
+    <select name="status">
+      <option value="draft"{{if or (eq .Tool.Status "draft") (eq .Tool.Status "")}} selected{{end}}>draft</option>
+      <option value="active"{{if eq .Tool.Status "active"}} selected{{end}}>active</option>
+      <option value="maintenance"{{if eq .Tool.Status "maintenance"}} selected{{end}}>maintenance</option>
+      <option value="disabled"{{if eq .Tool.Status "disabled"}} selected{{end}}>disabled</option>
+    </select>
+  </label>
+  <label>Display Order <input name="display_order" type="number" min="0" value="{{.Tool.DisplayOrder}}"></label>
+  <label>Maintenance Message <textarea name="maintenance_message" maxlength="512">{{deref .Tool.MaintenanceMessage}}</textarea></label>
+  <button type="submit">Simpan</button>
+  <a href="/admin/tools">Batal</a>
+</form>
+{{end}}

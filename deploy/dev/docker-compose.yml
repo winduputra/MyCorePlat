@@ -1,0 +1,50 @@
+# Tools BPBJ — Local development database (Task 4).
+#
+# DEV ONLY. Never use this file for production. Production uses the existing
+# external MariaDB service (see docs/deployment-design.md).
+#
+# Secrets are file-based and live under ./secrets/ which is git-ignored.
+# Paths here are relative to this compose file's directory.
+#
+#   Start:  docker compose -f deploy/dev/docker-compose.yml up -d
+#   Status: docker compose -f deploy/dev/docker-compose.yml ps
+#   Stop:   docker compose -f deploy/dev/docker-compose.yml stop
+#
+# Do NOT run `down -v`: the dev-db-data volume must be preserved.
+
+services:
+  mariadb-dev:
+    image: mariadb:11.4
+    container_name: mycoreplat-mariadb-dev
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/dev_db_root_pw
+      MARIADB_DATABASE: mycoreplat
+      MARIADB_USER: mycoreplat_app
+      MARIADB_PASSWORD_FILE: /run/secrets/dev_db_app_pw
+    secrets:
+      - dev_db_root_pw
+      - dev_db_app_pw
+    ports:
+      # Bind to loopback only: the database is not reachable from the network.
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - dev-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # Service-level resource limits are honored by `docker compose` standalone.
+    mem_limit: 1g
+    cpus: 1.0
+
+volumes:
+  dev-db-data:
+
+secrets:
+  dev_db_root_pw:
+    file: ./secrets/dev_db_root_pw.txt
+  dev_db_app_pw:
+    file: ./secrets/dev_db_app_pw.txt

@@ -1,0 +1,20 @@
+{{define "token_create"}}{{template "layout" .}}{{end}}
+
+{{define "content"}}
+{{if .Error}}<p role="alert" style="color:#b00">{{.Error}}</p>{{end}}
+
+<p>Tool: <strong>{{.Tool.Name}}</strong> (<code>{{.Tool.Slug}}</code>)</p>
+<p><small>Token terikat pada satu tool. Siapa pun yang memiliki token dapat menggunakannya — label penerima bersifat deskriptif, bukan verifikasi identitas.</small></p>
+
+<form method="post" action="{{.FormAction}}">
+  <p>
+    <label for="recipient_label">Label penerima (opsional)</label><br>
+    <input id="recipient_label" name="recipient_label" type="text" maxlength="128" placeholder="mis. Bidang PBJ - Andi">
+  </p>
+  <p>
+    <label for="expires_at">Berlaku sampai (wajib)</label><br>
+    <input id="expires_at" name="expires_at" type="datetime-local" required>
+  </p>
+  <p><button type="submit">Buat token</button> <a href="/admin/tools/{{.ToolID}}/tokens">Batal</a></p>
+</form>
+{{end}}
